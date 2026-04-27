@@ -1,0 +1,799 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Sonic Forever / Absolute</title>
+
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg:          #06080a;
+      --panel-bg:    #0e1014;
+      --panel-border:#1c2028;
+      --text:        #e8ecf0;
+      --text-muted:  #5a6070;
+      --accent-s1f:  #3096e8;   /* S1F blue */
+      --accent-s2a:  #e85030;   /* S2A red  */
+      --accent:      #3096e8;   /* default — overridden per game */
+      --blue:        #2255cc;
+      --blue-light:  #4488ff;
+      --red:         #e63a30;
+      --hover-bg:    #141820;
+      --active-bg:   #1c2230;
+      --selected-bg: #182040;
+      --sidebar-w:   280px;
+      --radius:      6px;
+      --transition:  0.15s ease;
+    }
+    html, body {
+      width: 100vw; height: 100vh; overflow: hidden;
+      background: var(--bg); color: var(--text);
+      font-family: system-ui, -apple-system, sans-serif;
+      font-size: 13px; user-select: none;
+    }
+    #app { display: flex; width: 100vw; height: 100vh; position: relative; }
+
+    /* ── GAME PICKER ── */
+    #game-picker {
+      position: fixed; inset: 0; z-index: 300;
+      background: var(--bg);
+      display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 32px;
+    }
+    #game-picker h1 { font-size: 18px; font-weight: 700; color: var(--text-muted); letter-spacing: 2px; text-transform: uppercase; }
+    .game-cards { display: flex; gap: 20px; }
+    .game-card {
+      display: flex; flex-direction: column; align-items: center; gap: 14px;
+      padding: 24px 32px; border-radius: 12px;
+      border: 2px solid var(--panel-border); background: var(--panel-bg);
+      cursor: pointer; transition: border-color .2s, transform .15s, box-shadow .2s;
+      min-width: 160px;
+    }
+    .game-card:hover { transform: translateY(-4px); }
+    .game-card.s1f:hover { border-color: var(--accent-s1f); box-shadow: 0 8px 32px #3096e830; }
+    .game-card.s2a:hover { border-color: var(--accent-s2a); box-shadow: 0 8px 32px #e8503030; }
+    .game-card img { width: 64px; height: 64px; image-rendering: pixelated; }
+    .game-card-title { font-size: 14px; font-weight: 700; }
+    .game-card.s1f .game-card-title { color: var(--accent-s1f); }
+    .game-card.s2a .game-card-title { color: var(--accent-s2a); }
+    .game-card-sub { font-size: 11px; color: var(--text-muted); }
+
+    /* ── SIDEBAR ── */
+    #sidebar {
+      width: var(--sidebar-w); min-width: var(--sidebar-w); height: 100%;
+      background: var(--panel-bg); border-right: 1px solid var(--panel-border);
+      display: flex; flex-direction: column; z-index: 20;
+      transition: width var(--transition), min-width var(--transition);
+    }
+    #sidebar.collapsed { width: 0; min-width: 0; overflow: hidden; }
+    .sidebar-header {
+      padding: 12px 14px 8px; border-bottom: 1px solid var(--panel-border);
+      display: flex; flex-direction: column; gap: 8px; flex-shrink: 0;
+    }
+    .sidebar-logo { display: flex; align-items: center; gap: 10px; }
+    .sidebar-logo img { height: 36px; image-rendering: pixelated; filter: drop-shadow(0 0 6px #3096e840); }
+    .sidebar-logo-title { font-size: 14px; font-weight: 700; color: var(--accent); letter-spacing: .5px; }
+    .sidebar-logo-sub { font-size: 10px; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase; }
+    .game-switch-btn {
+      display: flex; align-items: center; gap: 6px;
+      background: transparent; border: 1px solid var(--panel-border); border-radius: var(--radius);
+      padding: 5px 10px; font-size: 11px; color: var(--text-muted); cursor: pointer;
+      transition: background var(--transition), color var(--transition);
+    }
+    .game-switch-btn:hover { background: var(--hover-bg); color: var(--text); }
+
+    .launch-btn {
+      display: flex; align-items: center; justify-content: center; gap: 8px;
+      background: linear-gradient(135deg, var(--accent) 0%, color-mix(in srgb, var(--accent) 70%, black) 100%);
+      color: #fff; border: none; border-radius: var(--radius);
+      padding: 8px 14px; font-size: 13px; font-weight: 700;
+      cursor: pointer; width: 100%; letter-spacing: .5px;
+      transition: opacity var(--transition), transform var(--transition);
+    }
+    .launch-btn:hover { opacity: .9; transform: translateY(-1px); }
+    .launch-btn:active { transform: translateY(0); }
+    .launch-btn:disabled { opacity: .4; cursor: not-allowed; transform: none; }
+
+    .file-toolbar {
+      display: flex; flex-wrap: wrap; gap: 3px;
+      padding: 6px 8px; border-bottom: 1px solid var(--panel-border); flex-shrink: 0;
+    }
+    .tb-btn {
+      display: flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px; background: transparent;
+      border: 1px solid transparent; border-radius: var(--radius);
+      color: var(--text-muted); cursor: pointer;
+      transition: background var(--transition), color var(--transition), border-color var(--transition);
+    }
+    .tb-btn:hover { background: var(--hover-bg); color: var(--text); border-color: var(--panel-border); }
+    .tb-btn.danger:hover { color: var(--red); border-color: var(--red); }
+    .tb-btn:disabled { opacity: .35; pointer-events: none; }
+    .tb-divider { width: 1px; height: 20px; background: var(--panel-border); margin: 4px 2px; }
+    .tb-btn svg { width: 14px; height: 14px; stroke: currentColor; fill: none; stroke-width: 2; stroke-linecap: round; stroke-linejoin: round; }
+
+    .breadcrumb {
+      display: flex; align-items: center; gap: 2px;
+      padding: 4px 8px; border-bottom: 1px solid var(--panel-border);
+      overflow-x: auto; flex-shrink: 0; min-height: 28px;
+    }
+    .breadcrumb::-webkit-scrollbar { display: none; }
+    .bc-item { color: var(--blue-light); cursor: pointer; font-size: 11px; white-space: nowrap; padding: 2px 4px; border-radius: 3px; transition: background var(--transition); }
+    .bc-item:hover { background: var(--hover-bg); }
+    .bc-sep { color: var(--text-muted); font-size: 11px; }
+
+    #file-list-wrap { flex: 1; overflow-y: auto; padding: 4px; position: relative; }
+    #file-list-wrap.drag-over::after {
+      content: 'Drop files here'; position: absolute; inset: 0;
+      background: rgba(48,150,232,.1); border: 2px dashed var(--accent);
+      border-radius: var(--radius); display: flex; align-items: center;
+      justify-content: center; font-size: 14px; color: var(--accent);
+      pointer-events: none; z-index: 10;
+    }
+    #fm-loading { display: flex; align-items: center; justify-content: center; flex-direction: column; gap: 8px; height: 80px; }
+    .fm-spinner { width: 20px; height: 20px; border: 2px solid var(--panel-border); border-top-color: var(--accent); border-radius: 50%; animation: spin .9s linear infinite; }
+    .fm-loading-text { font-size: 11px; color: var(--text-muted); }
+    .file-item { display: flex; align-items: center; gap: 8px; padding: 4px 8px; border-radius: var(--radius); cursor: pointer; border: 1px solid transparent; transition: background var(--transition); white-space: nowrap; overflow: hidden; }
+    .file-item:hover { background: var(--hover-bg); }
+    .file-item.selected { background: var(--selected-bg); border-color: var(--blue); }
+    .file-item svg { width: 14px; height: 14px; flex-shrink: 0; }
+    .file-item .file-name { font-size: 12px; overflow: hidden; text-overflow: ellipsis; flex: 1; }
+    .file-item.dir svg { color: var(--accent); stroke: var(--accent); fill: none; }
+    .file-item.file svg { color: var(--text-muted); stroke: var(--text-muted); fill: none; }
+    #file-list-empty { text-align: center; color: var(--text-muted); font-size: 12px; padding: 20px 8px; display: none; }
+
+    .settings-panel { border-top: 1px solid var(--panel-border); padding: 8px 12px; flex-shrink: 0; }
+
+    #sidebar-toggle {
+      position: absolute; left: 0; top: 50%; transform: translateY(-50%); z-index: 30;
+      width: 20px; height: 56px; background: var(--panel-bg); border: 1px solid var(--panel-border);
+      border-left: none; border-radius: 0 var(--radius) var(--radius) 0;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      color: var(--text-muted); transition: color var(--transition), background var(--transition);
+    }
+    #sidebar-toggle:hover { background: var(--hover-bg); color: var(--text); }
+    #sidebar-toggle svg { width: 12px; height: 12px; stroke: currentColor; fill: none; stroke-width: 2.5; stroke-linecap: round; stroke-linejoin: round; }
+
+    #canvas-area { flex: 1; position: relative; background: #000; overflow: hidden; }
+    #canvas { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; image-rendering: pixelated; display: block; }
+
+    #splash {
+      position: absolute; inset: 0; z-index: 100; background: #020406;
+      display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px;
+    }
+    #splash img { height: 120px; image-rendering: pixelated; filter: drop-shadow(0 0 20px #3096e855); animation: splash-pulse 2s ease-in-out infinite; }
+    @keyframes splash-pulse { 0%,100%{filter:drop-shadow(0 0 12px #3096e833)} 50%{filter:drop-shadow(0 0 28px #3096e888)} }
+    .splash-spinner { width: 32px; height: 32px; border: 3px solid var(--panel-border); border-top-color: var(--accent); border-radius: 50%; animation: spin .9s linear infinite; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #splash-status { font-size: 12px; color: var(--text-muted); letter-spacing: 1px; }
+
+    #console-panel {
+      position: absolute; bottom: 0; left: 0; right: 0; height: 220px;
+      background: rgba(2,4,6,.95); border-top: 1px solid var(--panel-border);
+      display: none; flex-direction: column; z-index: 50; backdrop-filter: blur(8px);
+    }
+    #console-panel.visible { display: flex; }
+    .console-header { display: flex; align-items: center; justify-content: space-between; padding: 4px 10px; border-bottom: 1px solid var(--panel-border); flex-shrink: 0; }
+    .console-title { font-size: 11px; font-weight: 600; color: var(--text-muted); letter-spacing: 1px; text-transform: uppercase; }
+    .console-btns { display: flex; gap: 6px; }
+    .console-btn { font-size: 11px; padding: 2px 8px; background: var(--hover-bg); border: 1px solid var(--panel-border); border-radius: 3px; color: var(--text-muted); cursor: pointer; }
+    .console-btn:hover { color: var(--text); }
+    #console-output { flex: 1; overflow-y: auto; padding: 4px 8px; font-family: 'Cascadia Code','Fira Code',monospace; font-size: 11px; line-height: 1.5; }
+    .cl { white-space: pre-wrap; word-break: break-all; }
+    .cl-err  { color: #ff6b6b; }
+    .cl-warn { color: #ffd93d; }
+    .cl-info { color: #74c0fc; }
+    .cl-ok   { color: #69db7c; }
+    .cl-hi   { color: var(--accent); }
+
+    #progress-overlay { display: none; position: fixed; inset: 0; z-index: 200; background: rgba(0,0,0,.6); backdrop-filter: blur(4px); align-items: center; justify-content: center; }
+    #progress-overlay.visible { display: flex; }
+    .progress-box { background: var(--panel-bg); border: 1px solid var(--panel-border); border-radius: 10px; padding: 24px 32px; min-width: 320px; display: flex; flex-direction: column; gap: 12px; }
+    .progress-title { font-weight: 600; font-size: 14px; }
+    .progress-status { font-size: 12px; color: var(--text-muted); }
+    .progress-bar-wrap { width: 100%; height: 6px; background: var(--panel-border); border-radius: 3px; overflow: hidden; }
+    #progress-bar { height: 100%; background: linear-gradient(90deg, var(--blue-light), var(--accent)); border-radius: 3px; transition: width .1s ease; width: 0%; }
+
+    * { scrollbar-width: thin; scrollbar-color: var(--panel-border) transparent; }
+  </style>
+</head>
+<body>
+
+<!-- Game Picker — shown when no game selected yet -->
+<div id="game-picker">
+  <h1>Select a Game</h1>
+  <div class="game-cards">
+    <div class="game-card s1f" onclick="selectGame('S1F')">
+      <img src="https://cdn.jsdelivr.net/gh/ant9012/s1f-s2a-standalone@main/s1f.ico" onerror="this.style.display='none'" />
+      <div class="game-card-title">Sonic 1 Forever</div>
+      <div class="game-card-sub">RSDKv4 Engine</div>
+    </div>
+    <div class="game-card s2a" onclick="selectGame('S2A')">
+      <img src="https://cdn.jsdelivr.net/gh/ant9012/s1f-s2a-standalone@main/s2a.ico" onerror="this.style.display='none'" />
+      <div class="game-card-title">Sonic 2 Absolute</div>
+      <div class="game-card-sub">RSDKv4 Engine</div>
+    </div>
+  </div>
+</div>
+
+<div id="progress-overlay">
+  <div class="progress-box">
+    <div class="progress-title">&#x1F4C1; Working...</div>
+    <div class="progress-status" id="progress-status">Please wait</div>
+    <div class="progress-bar-wrap"><div id="progress-bar"></div></div>
+  </div>
+</div>
+
+<div id="app" style="display:none">
+  <div id="sidebar">
+    <div class="sidebar-header">
+      <div class="sidebar-logo">
+        <img id="sidebar-icon" src="" />
+        <div>
+          <div class="sidebar-logo-title" id="sidebar-title">—</div>
+          <div class="sidebar-logo-sub">RSDKv4 Launcher</div>
+        </div>
+      </div>
+      <button class="game-switch-btn" onclick="switchGame()">
+        <svg viewBox="0 0 24 24" width="12" height="12" stroke="currentColor" fill="none" stroke-width="2"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 014-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 01-4 4H3"/></svg>
+        Switch Game
+      </button>
+      <button class="launch-btn" id="launch-btn" disabled onclick="launchEngine()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" width="14" height="14"><polygon points="5,3 19,12 5,21"/></svg>
+        Launch Game
+      </button>
+    </div>
+
+    <div class="file-toolbar">
+      <button class="tb-btn" id="tb-upload-file"  onclick="fm_uploadFile()"   title="Upload file(s)" disabled><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></button>
+      <button class="tb-btn" id="tb-upload-dir"   onclick="fm_uploadFolder()" title="Upload folder"  disabled><svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="12" y1="11" x2="12" y2="17"/><polyline points="9 14 12 11 15 14"/></svg></button>
+      <button class="tb-btn" id="tb-new-folder"   onclick="fm_newFolder()"   title="New folder"     disabled><svg viewBox="0 0 24 24"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg></button>
+      <button class="tb-btn" id="tb-download"     onclick="fm_download()"    title="Download selected" disabled><svg viewBox="0 0 24 24"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg></button>
+      <div class="tb-divider"></div>
+      <button class="tb-btn" id="tb-cut"    onclick="fm_cut()"    title="Cut"    disabled><svg viewBox="0 0 24 24"><circle cx="6" cy="20" r="2"/><circle cx="6" cy="4" r="2"/><line x1="6" y1="6" x2="6" y2="18"/><line x1="6" y1="13" x2="19" y2="2"/><line x1="6" y1="11" x2="19" y2="22"/></svg></button>
+      <button class="tb-btn" id="tb-copy"   onclick="fm_copy()"   title="Copy"   disabled><svg viewBox="0 0 24 24"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1"/></svg></button>
+      <button class="tb-btn" id="tb-paste"  onclick="fm_paste()"  title="Paste"  disabled><svg viewBox="0 0 24 24"><path d="M16 4h2a2 2 0 012 2v14a2 2 0 01-2 2H6a2 2 0 01-2-2V6a2 2 0 012-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg></button>
+      <div class="tb-divider"></div>
+      <button class="tb-btn" id="tb-rename" onclick="fm_rename()"  title="Rename" disabled><svg viewBox="0 0 24 24"><path d="M11 4H4a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 013 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></button>
+      <button class="tb-btn danger" id="tb-delete" onclick="fm_delete()" title="Delete selected" disabled><svg viewBox="0 0 24 24"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg></button>
+    </div>
+
+    <div class="breadcrumb" id="breadcrumb"></div>
+
+    <div id="file-list-wrap"
+      ondragover="fm_onDragOver(event)" ondragenter="fm_onDragEnter(event)"
+      ondragleave="fm_onDragLeave(event)" ondrop="fm_onDrop(event)"
+      onclick="fm_clearSelection(event)">
+      <div id="fm-loading"><div class="fm-spinner"></div><div class="fm-loading-text">Loading...</div></div>
+      <div id="file-list-empty">Empty folder</div>
+      <div id="file-list"></div>
+    </div>
+
+    <div class="settings-panel">
+      <div style="font-size:10px;text-transform:uppercase;letter-spacing:1px;color:var(--text-muted);">Upload your game's <code>Data.rsdk</code> and mod files via the file manager above.</div>
+    </div>
+  </div>
+
+  <div id="sidebar-toggle" onclick="toggleSidebar()" title="Toggle file manager">
+    <svg id="toggle-chevron" viewBox="0 0 24 24"><polyline points="15 18 9 12 15 6"/></svg>
+  </div>
+
+  <div id="canvas-area">
+    <div id="splash">
+      <img id="splash-icon" src="" />
+      <div class="splash-spinner"></div>
+      <div id="splash-status">Initializing...</div>
+    </div>
+    <canvas id="canvas"></canvas>
+    <div id="console-panel">
+      <div class="console-header">
+        <span class="console-title">&#x25B8; Engine Console <span style="font-weight:300;opacity:.5">(` to toggle)</span></span>
+        <div class="console-btns">
+          <button class="console-btn" onclick="consoleClear()">Clear</button>
+          <button class="console-btn" onclick="consoleHide()">Close</button>
+        </div>
+      </div>
+      <div id="console-output"></div>
+    </div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+
+<script>
+/* ============================================================
+   CDN BASE — ant9012/s1f-s2a-standalone via jsDelivr
+
+   DEV_MODE: set true to load RSDKv4.js/.wasm from local files.
+   Expected: RSDKv4.js, RSDKv4.wasm, lib/RSDKv4.js
+   ============================================================ */
+const DEV_MODE = false;
+
+const CDN_BASE     = 'https://cdn.jsdelivr.net/gh/ant9012/s1f-s2a-standalone@main/';
+const CDN_FILES_JS = CDN_BASE + 'Files.js';
+const CDN_LIB_RSDK = CDN_BASE + 'lib/RSDKv4.js';
+const CDN_RSDK_JS  = CDN_BASE + 'RSDKv4.js';
+
+const LIB_RSDK = DEV_MODE ? './lib/RSDKv4.js' : CDN_LIB_RSDK;
+const RSDK_JS  = DEV_MODE ? './RSDKv4.js'      : CDN_RSDK_JS;
+
+/* Per-game config */
+const GAMES = {
+  S1F: {
+    id:       'S1Forever',
+    title:    'Sonic 1 Forever',
+    icon:     CDN_BASE + 's1f.ico',
+    accent:   '#3096e8',
+    session:  'boot_s1f',
+  },
+  S2A: {
+    id:       'S2Absolute',
+    title:    'Sonic 2 Absolute',
+    icon:     CDN_BASE + 's2a.ico',
+    accent:   '#e85030',
+    session:  'boot_s2a',
+  },
+};
+
+/* Determine active game from sessionStorage */
+const ACTIVE_KEY  = sessionStorage.getItem('boot_s1f') === 'true' ? 'S1F'
+                  : sessionStorage.getItem('boot_s2a') === 'true' ? 'S2A'
+                  : null;
+const ACTIVE_GAME = ACTIVE_KEY ? GAMES[ACTIVE_KEY] : null;
+const IS_GAME_MODE = !!ACTIVE_GAME;
+
+if (IS_GAME_MODE) {
+  sessionStorage.removeItem(ACTIVE_GAME.session);
+  // Apply accent colour for selected game
+  document.documentElement.style.setProperty('--accent', ACTIVE_GAME.accent);
+}
+
+/* Game picker */
+function selectGame(key) {
+  const game = GAMES[key];
+  sessionStorage.setItem(game.session, 'true');
+  // Show launcher UI with this game selected (reload into launcher mode)
+  location.reload();
+}
+
+/* Active launcher game (non-game-mode) */
+const LAUNCHER_KEY  = sessionStorage.getItem('launcher_game') || 'S1F';
+const LAUNCHER_GAME = GAMES[LAUNCHER_KEY] || GAMES.S1F;
+
+function switchGame() {
+  const next = LAUNCHER_KEY === 'S1F' ? 'S2A' : 'S1F';
+  sessionStorage.setItem('launcher_game', next);
+  location.reload();
+}
+
+/* ============================================================
+   Console buffer
+   ============================================================ */
+window.__engineConsoleBuffer = [];
+window.__engineConsoleAppend = function(text) {
+  window.__engineConsoleBuffer.push(text);
+  if (window.__engineConsoleBuffer.length > 500) window.__engineConsoleBuffer.splice(0, 1);
+  appendConsoleLine(text);
+};
+
+/* ============================================================
+   Module pre-config for Files.js
+   ============================================================ */
+var Module = {
+  locateFile: function(path) {
+    if (path.endsWith('.wasm') || path.endsWith('.worker.js')) return CDN_BASE + path;
+    return path;
+  },
+  onRuntimeInitialized: function() {
+    console.log('[Files.js] Runtime initialized');
+    window._FilesModule = Module;
+    fsReady();
+  },
+  print: function(text) {
+    if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+    window.__engineConsoleAppend?.('[FS] ' + text); console.log('[Files.js]', text);
+  },
+  printErr: function(text) {
+    if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
+    window.__engineConsoleAppend?.('[FS][ERR] ' + text); console.error('[Files.js]', text);
+  },
+  setStatus: function(text) { if (text) console.log('[Files.js]', text); },
+  totalDependencies: 0,
+  monitorRunDependencies: function(left) { Module.totalDependencies = Math.max(Module.totalDependencies, left); }
+};
+</script>
+
+<script>
+  /* Load Files.js only in launcher mode */
+  if (!IS_GAME_MODE) {
+    const s = document.createElement('script');
+    s.src = CDN_FILES_JS; s.crossOrigin = 'anonymous'; s.async = false;
+    document.head.appendChild(s);
+  }
+</script>
+
+<script>
+/* ============================================================
+   UI helpers
+   ============================================================ */
+let sidebarOpen = true;
+function toggleSidebar() {
+  sidebarOpen = !sidebarOpen;
+  document.getElementById('sidebar').classList.toggle('collapsed', !sidebarOpen);
+  document.getElementById('toggle-chevron').setAttribute('points', sidebarOpen ? '15 18 9 12 15 6' : '9 18 15 12 9 6');
+}
+
+let consoleVisible = true;
+function getLineClass(l) {
+  if (/\[ERROR\]|ERROR|Exception|\[FATAL\]/.test(l)) return 'cl-err';
+  if (/WARNING|WARN|\[WARNING\]/.test(l)) return 'cl-warn';
+  if (/\[INFO\]/.test(l)) return 'cl-info';
+  if (/->/.test(l)) return 'cl-ok';
+  if (/TRANSITIONING|\[STATUS\]/.test(l)) return 'cl-hi';
+  return '';
+}
+function appendConsoleLine(text) {
+  const out = document.getElementById('console-output'); if (!out) return;
+  const div = document.createElement('div'); div.className = 'cl ' + getLineClass(text); div.textContent = text;
+  out.appendChild(div);
+  if (out.children.length > 500) out.removeChild(out.firstChild);
+  if (consoleVisible) out.scrollTop = out.scrollHeight;
+}
+function consoleClear() { document.getElementById('console-output').innerHTML = ''; }
+function consoleHide() { consoleVisible = false; document.getElementById('console-panel').classList.remove('visible'); }
+document.addEventListener('keydown', e => {
+  if (e.key === '`' || e.key === '~') {
+    e.preventDefault(); consoleVisible = !consoleVisible;
+    document.getElementById('console-panel').classList.toggle('visible', consoleVisible);
+    if (consoleVisible) document.getElementById('console-output').scrollTop = 99999;
+  }
+});
+
+function setSplashStatus(t) { document.getElementById('splash-status').textContent = t; }
+
+/* ============================================================
+   EngineFS
+   ============================================================ */
+const EngineFS = (() => {
+  let fspath = '/';
+  let activeMount = null;
+  let clipboard = null;
+  function jp(...parts) { return ('/' + parts.join('/')).replace(/\/+/g, '/'); }
+
+  async function Init(id) {
+    // Always mount at /RSDKv4 — same path lib/RSDKv4.js chdirs to and the
+    // same IDB store name Emscripten derives from the mountpoint. Using the
+    // same path in both launcher and engine guarantees they hit the same DB.
+    if (activeMount) { try { FS.unmount(activeMount); } catch(e) {} activeMount = null; }
+    if (!FS.analyzePath('/RSDKv4').exists) FS.mkdir('RSDKv4');
+    FS.mount(IDBFS, {}, '/RSDKv4');
+    activeMount = '/RSDKv4';
+    fspath = '/RSDKv4';
+    return new Promise((res, rej) => FS.syncfs(true, e => e ? rej(e) : res()));
+  }
+
+  async function InitMount(id) {
+    if (activeMount) { try { FS.unmount(activeMount); } catch(e) {} activeMount = null; }
+    if (!FS.analyzePath('/RSDKv4').exists) FS.mkdir('RSDKv4');
+    FS.mount(IDBFS, {}, '/RSDKv4');
+    activeMount = '/RSDKv4';
+    fspath = '/RSDKv4';
+    FS.syncfs(true, e => { if (e) console.error('[EngineFS] bg sync failed:', e); });
+  }
+
+  function Save() { return new Promise((res, rej) => FS.syncfs(e => e ? rej(e) : res())); }
+  function isDirPath(path) { try { return FS.isDir(FS.lookupPath(path).node.mode); } catch { return false; } }
+
+  function progressShow(msg) {
+    document.getElementById('progress-overlay').classList.add('visible');
+    document.getElementById('progress-status').textContent = msg;
+    document.getElementById('progress-bar').style.width = '0%';
+  }
+  function progressUpdate(msg, pct) {
+    document.getElementById('progress-status').textContent = msg;
+    document.getElementById('progress-bar').style.width = pct + '%';
+  }
+  function progressHide() { document.getElementById('progress-overlay').classList.remove('visible'); }
+
+  async function FileUploadCommon(files, shouldSave, parent) {
+    parent = parent || fspath; progressShow('Uploading...');
+    try {
+      for (let i = 0; i < files.length; i++) {
+        const file = files[i], relPath = file.webkitRelativePath || file.name;
+        const filePath = jp(parent, relPath);
+        progressUpdate('Uploading ' + relPath + '...', (i / files.length) * 90);
+        let cur = '';
+        for (const part of PATH.dirname(filePath).split('/')) {
+          cur = jp(cur, part);
+          if (cur.length > 1 && !FS.analyzePath(cur).exists) { try { FS.mkdir(cur); } catch(e) {} }
+        }
+        if (file.name.toLowerCase().endsWith('.zip')) await ZipExtract(file, fspath);
+        else FS.writeFile(filePath, new Uint8Array(await file.arrayBuffer()), { encoding: 'binary' });
+      }
+      if (shouldSave) await Save();
+    } finally { progressHide(); }
+  }
+
+  async function FileUploadDlg(useDir) {
+    return new Promise((res, rej) => {
+      const inp = document.createElement('input'); inp.type = 'file'; inp.multiple = true;
+      if (useDir) inp.webkitdirectory = true;
+      inp.onchange = async () => { if (!inp.files?.length) { rej(); return; } try { await FileUploadCommon(inp.files, true); res(); } catch(e) { rej(e); } };
+      inp.click();
+    });
+  }
+
+  async function FileDownload(paths) {
+    const zip = new JSZip();
+    async function addToZip(path, zipPath) {
+      if (!FS.lookupPath(path).node) return;
+      if (isDirPath(path)) { for (const e of FS.readdir(path)) { if (e === '.' || e === '..') continue; await addToZip(path+'/'+e, zipPath+'/'+e); } }
+      else zip.file(zipPath, FS.readFile(path));
+    }
+    for (const p of paths) await addToZip(p, p.split('/').pop());
+    const blob = await zip.generateAsync({ type: 'blob' });
+    const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = 'export.zip';
+    document.body.appendChild(a); a.click(); setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(a.href); }, 100);
+  }
+
+  async function ZipExtract(file, fsPath) {
+    const zip = await JSZip.loadAsync(file);
+    const dirs = [], files = [];
+    zip.forEach((relPath, entry) => { const full = jp(fsPath, relPath); if (entry.dir) dirs.push(full); else files.push({ path: full, entry }); });
+    for (const d of dirs) { let cur = ''; for (const part of d.split('/')) { cur = jp(cur, part); if (cur.length > 1 && !FS.analyzePath(cur).exists) { try { FS.mkdir(cur); } catch(e) {} } } }
+    const BATCH = 20, total = files.length;
+    for (let i = 0; i < total; i += BATCH) {
+      for (const { path, entry } of files.slice(i, i + BATCH)) {
+        const data = await entry.async('uint8array');
+        const dir = path.substring(0, path.lastIndexOf('/'));
+        if (dir.length > 1 && !FS.analyzePath(dir).exists) { try { FS.mkdir(dir); } catch(e) {} }
+        FS.writeFile(path, data, { encoding: 'binary' });
+      }
+      progressUpdate('Saving... (' + Math.min(i+BATCH,total) + '/' + total + ' files)', ((i+BATCH)/total)*100);
+      await Save();
+    }
+  }
+
+  async function DirectoryCreate(name) { FS.mkdir(jp(fspath, name)); await Save(); }
+  function Cut(items)  { clipboard = { items, isCut: true }; }
+  function Copy(items) { clipboard = { items, isCut: false }; }
+  async function Paste() {
+    if (!clipboard) return;
+    for (const item of clipboard.items) {
+      const dst = jp(fspath, item.name);
+      if (clipboard.isCut) FS.rename(item.path, dst);
+      else if (item.isDirectory) dirCopyRecursive(item.path, dst);
+      else FS.writeFile(dst, FS.readFile(item.path));
+    }
+    await Save(); clipboard = null;
+  }
+  function dirCopyRecursive(src, dst) {
+    try { FS.stat(dst); } catch { FS.mkdir(dst); }
+    for (const f of FS.readdir(src)) { if (f==='.'||f==='..') continue; const sp=src+'/'+f,dp=dst+'/'+f; if (isDirPath(sp)) dirCopyRecursive(sp,dp); else FS.writeFile(dp,FS.readFile(sp)); }
+  }
+  async function Rename(src, dst) { FS.rename(jp(fspath, src), jp(fspath, dst)); await Save(); }
+  async function Delete(names) {
+    if (!confirm('Delete selected items? This is irreversible.')) return;
+    for (const n of names) { const p=jp(fspath,n); if(!FS.lookupPath(p).node) continue; if(isDirPath(p)) dirDeleteRecursive(p); else FS.unlink(p); }
+    await Save();
+  }
+  function dirDeleteRecursive(path) {
+    for (const f of FS.readdir(path)) { if (f==='.'||f==='..') continue; const fp=path+'/'+f; if(isDirPath(fp)) dirDeleteRecursive(fp); else FS.unlink(fp); }
+    FS.rmdir(path);
+  }
+  function GetPathItems() {
+    const items = [];
+    try { for (const name of FS.readdir(fspath)) { if(name==='.'||name==='..') continue; const path=jp(fspath,name); items.push({name,path,isDirectory:isDirPath(path)}); } } catch(e) {}
+    return items;
+  }
+  return { get fspath(){return fspath;}, set fspath(v){fspath=v;}, Init, InitMount, Save, FileUploadDlg, FileUploadCommon, FileDownload, ZipExtract, DirectoryCreate, Cut, Copy, Paste, Rename, Delete, GetPathItems };
+})();
+window.EngineFS = EngineFS;
+
+/* ============================================================
+   TS_InitFS — called by lib/RSDKv4.js after wasm init.
+   lib/RSDKv4.js always passes id='RSDKv4' and then calls
+   FS.chdir('/RSDKv4') inside RSDK_Init. We mount the
+   game-specific IDBFS at /RSDKv4 so the engine finds its files.
+   ============================================================ */
+window.TS_InitFS = async function(id, callback) {
+  // id is always 'RSDKv4' (hardcoded in lib/RSDKv4.js), which is exactly
+  // what we want — same path used by the launcher so IDB gives the same store.
+  try {
+    console.log('[TS_InitFS] mounting IDBFS at /RSDKv4');
+    if (!FS.analyzePath('/RSDKv4').exists) FS.mkdir('RSDKv4');
+    FS.mount(IDBFS, {}, '/RSDKv4');
+    await new Promise((res, rej) => FS.syncfs(true, e => e ? rej(e) : res()));
+    console.log('[TS_InitFS] ready');
+    callback();
+  } catch(e) {
+    console.error('[TS_InitFS] failed:', e);
+    window.__engineConsoleAppend?.('[ERROR] TS_InitFS: ' + e.message);
+  }
+};
+
+/* ============================================================
+   File Manager UI
+   ============================================================ */
+let fm_selected = [], fm_lastIdx = null;
+const FM_IDS = ['tb-upload-file','tb-upload-dir','tb-new-folder','tb-download','tb-cut','tb-copy','tb-paste','tb-rename','tb-delete'];
+function fm_setEnabled(v) { FM_IDS.forEach(id => { const el=document.getElementById(id); if(el) el.disabled=!v; }); }
+
+async function fm_refresh() {
+  const list=document.getElementById('file-list'), empty=document.getElementById('file-list-empty');
+  const items=EngineFS.GetPathItems(); list.innerHTML=''; empty.style.display=items.length?'none':'block';
+  items.forEach((item,idx) => {
+    const div=document.createElement('div'); div.className='file-item '+(item.isDirectory?'dir':'file'); div.dataset.name=item.name;
+    if(fm_selected.includes(item.name)) div.classList.add('selected');
+    const iconDir='<svg viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>';
+    const iconFile='<svg viewBox="0 0 24 24" stroke-width="2" stroke="currentColor" fill="none"><path d="M13 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V9z"/><polyline points="13 2 13 9 20 9"/></svg>';
+    div.innerHTML=(item.isDirectory?iconDir:iconFile)+'<span class="file-name">'+escHtml(item.name)+'</span>';
+    div.addEventListener('click',e=>fm_itemClick(item,idx,e)); div.addEventListener('dblclick',()=>fm_itemDblClick(item));
+    list.appendChild(div);
+  });
+  fm_updateBreadcrumb(EngineFS.fspath);
+}
+function escHtml(s){return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');}
+function fm_itemClick(item,idx,e) {
+  e.stopPropagation(); const all=EngineFS.GetPathItems();
+  if(e.ctrlKey||e.metaKey) fm_selected=fm_selected.includes(item.name)?fm_selected.filter(x=>x!==item.name):[...fm_selected,item.name];
+  else if(e.shiftKey&&fm_lastIdx!==null){const lo=Math.min(fm_lastIdx,idx),hi=Math.max(fm_lastIdx,idx);fm_selected=[...new Set([...fm_selected,...all.slice(lo,hi+1).map(x=>x.name)])];}
+  else{fm_lastIdx=idx;fm_selected=[item.name];}
+  fm_renderSel();
+}
+async function fm_itemDblClick(item){if(item.isDirectory)await fm_cd(EngineFS.fspath+'/'+item.name);}
+function fm_renderSel(){document.querySelectorAll('.file-item').forEach(el=>el.classList.toggle('selected',fm_selected.includes(el.dataset.name)));}
+function fm_clearSelection(e){const w=document.getElementById('file-list-wrap'),l=document.getElementById('file-list');if(e.target===w||e.target===l){fm_selected=[];fm_renderSel();}}
+async function fm_cd(path){EngineFS.fspath=path.replace(/\/+/g,'/');fm_selected=[];await fm_refresh();}
+function fm_updateBreadcrumb(path) {
+  const bc=document.getElementById('breadcrumb'); bc.innerHTML='';
+  const root=document.createElement('span'); root.className='bc-item'; root.textContent='/';
+  root.onclick=()=>fm_cd('/'+LAUNCHER_GAME.id); bc.appendChild(root);
+  const parts=path.split('/').filter(Boolean);
+  parts.forEach((part,i)=>{
+    const sep=document.createElement('span');sep.className='bc-sep';sep.textContent='›';bc.appendChild(sep);
+    const node=document.createElement('span');node.className='bc-item';node.textContent=part;
+    node.onclick=()=>fm_cd('/'+parts.slice(0,i+1).join('/'));bc.appendChild(node);
+  });
+}
+async function fm_uploadFile(){await EngineFS.FileUploadDlg(false);await fm_refresh();}
+async function fm_uploadFolder(){await EngineFS.FileUploadDlg(true);await fm_refresh();}
+async function fm_newFolder(){const n=prompt('Folder name:');if(n){await EngineFS.DirectoryCreate(n);await fm_refresh();}}
+async function fm_download(){if(fm_selected.length)await EngineFS.FileDownload(fm_selected.map(n=>EngineFS.fspath+'/'+n));}
+async function fm_cut(){EngineFS.Cut(EngineFS.GetPathItems().filter(x=>fm_selected.includes(x.name)));}
+async function fm_copy(){EngineFS.Copy(EngineFS.GetPathItems().filter(x=>fm_selected.includes(x.name)));}
+async function fm_paste(){await EngineFS.Paste();await fm_refresh();}
+async function fm_rename(){if(fm_selected.length!==1){alert('Select exactly one item.');return;}const n=fm_selected[0],nn=prompt('New name:',n);if(nn&&nn!==n){await EngineFS.Rename(n,nn);await fm_refresh();}}
+async function fm_delete(){if(!fm_selected.length)return;await EngineFS.Delete(fm_selected);fm_selected=[];await fm_refresh();}
+
+function fm_onDragOver(e){e.preventDefault();e.stopPropagation();document.getElementById('file-list-wrap').classList.add('drag-over');}
+function fm_onDragEnter(e){e.preventDefault();e.stopPropagation();document.getElementById('file-list-wrap').classList.add('drag-over');}
+function fm_onDragLeave(e){e.preventDefault();e.stopPropagation();document.getElementById('file-list-wrap').classList.remove('drag-over');}
+async function fm_onDrop(e) {
+  e.preventDefault();e.stopPropagation();document.getElementById('file-list-wrap').classList.remove('drag-over');
+  let doSave=false;
+  for(const item of Array.from(e.dataTransfer.items)){
+    if(item.kind!=='file')continue;const entry=item.webkitGetAsEntry?.();if(!entry)continue;
+    if(entry.isFile){const file=item.getAsFile();if(file){await EngineFS.FileUploadCommon([file],false,EngineFS.fspath);doSave=true;}}
+    else if(entry.isDirectory){const newDir=EngineFS.fspath+'/'+entry.name;try{FS.mkdir(newDir);}catch(ex){}await fm_dropDir(entry,newDir);doSave=true;}
+  }
+  if(doSave)await EngineFS.Save();await fm_refresh();
+}
+async function fm_dropDir(dirEntry,parentDir){
+  const reader=dirEntry.createReader();
+  const entries=await new Promise(res=>{const all=[];function read(){reader.readEntries(r=>{if(r.length){all.push(...r);read();}else res(all);});}read();});
+  for(const e of entries){
+    if(e.isFile){const file=await new Promise((res,rej)=>e.file(res,rej));await EngineFS.FileUploadCommon([file],false,parentDir);}
+    else if(e.isDirectory){const sub=parentDir+'/'+e.name;try{FS.mkdir(sub);}catch(ex){}await fm_dropDir(e,sub);}
+  }
+}
+
+/* ============================================================
+   Files.js ready callback (launcher mode)
+   ============================================================ */
+async function fsReady() {
+  try {
+    document.getElementById('fm-loading').style.display = 'none';
+    // Fire-and-forget mount so Launch button is immediately available
+    await EngineFS.InitMount(LAUNCHER_GAME.id);
+    fm_setEnabled(true);
+    setSplashStatus('Ready — press Launch Game to start');
+    document.getElementById('launch-btn').disabled = false;
+    // Populate file list once background sync finishes
+    EngineFS.Init(LAUNCHER_GAME.id).then(()=>fm_refresh()).catch(()=>fm_refresh());
+  } catch(e) {
+    console.error('[Launcher] EngineFS init failed:', e);
+    document.getElementById('fm-loading').innerHTML = '<div style="color:var(--red);font-size:11px;padding:8px">FS init failed: '+e.message+'</div>';
+  }
+}
+
+/* ============================================================
+   Engine launch
+   ============================================================ */
+let engineLoaded = false;
+function launchEngine() {
+  if (engineLoaded) return;
+  sessionStorage.setItem(LAUNCHER_GAME.session, 'true');
+  location.reload();
+}
+
+window.addEventListener('DOMContentLoaded', () => {
+  /* Determine mode and set up UI */
+  const activeGame = IS_GAME_MODE ? ACTIVE_GAME : LAUNCHER_GAME;
+
+  // Apply accent CSS var
+  document.documentElement.style.setProperty('--accent', activeGame.accent);
+
+  if (IS_GAME_MODE || sessionStorage.getItem('launcher_game')) {
+    // Hide game picker, show main UI
+    document.getElementById('game-picker').style.display = 'none';
+    document.getElementById('app').style.display = 'flex';
+  }
+
+  // Set icon + title
+  document.getElementById('sidebar-icon').src = activeGame.icon;
+  document.getElementById('splash-icon').src   = activeGame.icon;
+  document.getElementById('sidebar-title').textContent = activeGame.title;
+  document.title = activeGame.title;
+
+  if (IS_GAME_MODE) {
+    engineLoaded = true;
+    document.getElementById('sidebar').style.display = 'none';
+    document.getElementById('console-panel').classList.add('visible');
+
+    (function(){
+      const wrap=(orig,prefix)=>function(...args){
+        const text=args.map(a=>typeof a==='object'?JSON.stringify(a,null,2):String(a)).join(' ');
+        window.__engineConsoleAppend?.(prefix+text); orig.apply(console,args);
+      };
+      console.log=wrap(console.log,''); console.error=wrap(console.error,'[ERROR] ');
+      console.warn=wrap(console.warn,'[WARNING] '); console.info=wrap(console.info,'[INFO] ');
+    })();
+
+    loadScript(LIB_RSDK)
+      .then(() => {
+        Module.mainScriptUrlOrBlob = RSDK_JS;
+        Module.locateFile = function(path, prefix) {
+          if (path.endsWith('.wasm') || path.endsWith('.worker.js'))
+            return DEV_MODE ? ('./' + path) : (CDN_BASE + path);
+          return prefix + path;
+        };
+        // lib/RSDKv4.js defines RSDK_Init which calls FS.chdir('/RSDKv4').
+        // Since we mount the game-specific IDBFS at /RSDKv4 in TS_InitFS,
+        // this works correctly for both games without any further patching.
+      })
+      .then(() => loadScript(RSDK_JS))
+      .catch(err => {
+        console.error('[Launcher] Engine load failed:', err);
+        setSplashStatus('Error loading engine — check console');
+      });
+
+  } else {
+    // Launcher mode — replay buffered console lines
+    for (const l of window.__engineConsoleBuffer) appendConsoleLine(l);
+    // If a game was selected, show app; if not (first load), show picker
+    if (!sessionStorage.getItem('launcher_game')) {
+      // First visit — show game picker
+      document.getElementById('game-picker').style.display = 'flex';
+      document.getElementById('app').style.display = 'none';
+    }
+  }
+});
+
+/* Game picker selection — also enters launcher mode */
+function selectGame(key) {
+  sessionStorage.setItem('launcher_game', key);
+  location.reload();
+}
+
+function loadScript(src) {
+  return new Promise((res, rej) => {
+    const s = document.createElement('script');
+    s.src = src; s.crossOrigin = 'anonymous'; s.onload = res;
+    s.onerror = () => { console.error('[Launcher] Failed to load', src); setSplashStatus('Error loading: '+src); rej(new Error('Failed: '+src)); };
+    document.head.appendChild(s);
+  });
+}
+</script>
+</body>
+</html>
